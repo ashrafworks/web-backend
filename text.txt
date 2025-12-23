@@ -1,0 +1,634 @@
+// Project: express-mongo-booking-api (production-ready scaffold)
+// Structure shown as file separators. Copy each file into your project.
+
+// == FILE: package.json ==
+{
+  "name": "express-mongo-booking-api",
+  "version": "1.0.0",
+  "description": "Production-ready REST API for property/room bookings (Node, Express, MongoDB, Mongoose)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "lint": "eslint .",
+    "test": "echo \"no tests yet\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "express-rate-limit": "^6.7.0",
+    "helmet": "^6.0.1",
+    "joi": "^17.9.2",
+    "jsonwebtoken": "^9.0.0",
+    "mongoose": "^7.0.4",
+    "morgan": "^1.10.0",
+    "winston": "^3.8.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22",
+    "eslint": "^8.39.0"
+  }
+}
+
+// == FILE: .env.example ==
+PORT=4000
+MONGO_URI=mongodb://localhost:27017/booking_db
+JWT_SECRET=your_jwt_secret_here
+JWT_EXPIRATION=7d
+LOG_LEVEL=info
+RATE_LIMIT_WINDOW_MS=60000
+RATE_LIMIT_MAX=100
+
+// == FILE: src/server.js ==
+const app = require('./app');
+const config = require('./config/config');
+const logger = require('./config/logger');
+
+const PORT = config.port || 4000;
+
+app.listen(PORT, () => {
+  logger.info(`Server running on port ${PORT}`);
+});
+
+// == FILE: src/app.js ==
+const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const compression = require('compression');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+const routes = require('./routes');
+const { connectDB } = require('./config/db');
+const config = require('./config/config');
+const errorHandler = require('./middlewares/errorHandler');
+const logger = require('./config/logger');
+
+const app = express();
+
+// Connect DB
+connectDB();
+
+// Middlewares
+app.use(helmet());
+app.use(cors({ origin: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(compression());
+
+if (config.env === 'development') {
+  app.use(morgan('dev'));
+}
+
+const limiter = rateLimit({
+  windowMs: config.rateLimitWindowMs,
+  max: config.rateLimitMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(limiter);
+
+// Routes
+app.use('/api/v1', routes);
+
+// Health check
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+// Error handler
+app.use(errorHandler);
+
+module.exports = app;
+
+// == FILE: src/config/config.js ==
+require('dotenv').config();
+
+module.exports = {
+  env: process.env.NODE_ENV || 'development',
+  port: process.env.PORT || 4000,
+  mongoURI: process.env.MONGO_URI,
+  jwtSecret: process.env.JWT_SECRET,
+  jwtExpiration: process.env.JWT_EXPIRATION || '7d',
+  rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
+  rateLimitMax: Number(process.env.RATE_LIMIT_MAX) || 100,
+  logLevel: process.env.LOG_LEVEL || 'info',
+};
+
+// == FILE: src/config/db.js ==
+const mongoose = require('mongoose');
+const config = require('./config');
+const logger = require('./logger');
+
+const connectDB = async () => {
+  try {
+    await mongoose.connect(config.mongoURI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    logger.info('MongoDB connected');
+  } catch (err) {
+    logger.error('MongoDB connection error', err);
+    process.exit(1);
+  }
+};
+
+module.exports = { connectDB };
+
+// == FILE: src/config/logger.js ==
+const winston = require('winston');
+const config = require('./config');
+
+const logger = winston.createLogger({
+  level: config.logLevel,
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.printf(({ timestamp, level, message, ...meta }) => `${timestamp} [${level}] ${message} ${Object.keys(meta).length ? JSON.stringify(meta) : ''}`)
+  ),
+  transports: [new winston.transports.Console()],
+});
+
+module.exports = logger;
+
+// == FILE: src/utils/ApiError.js ==
+class ApiError extends Error {
+  constructor(statusCode, message, isOperational = true, stack = '') {
+    super(message);
+    this.statusCode = statusCode;
+    this.isOperational = isOperational;
+    if (stack) this.stack = stack;
+  }
+}
+
+module.exports = ApiError;
+
+// == FILE: src/middlewares/asyncHandler.js ==
+module.exports = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+// == FILE: src/middlewares/errorHandler.js ==
+const ApiError = require('../utils/ApiError');
+const logger = require('../config/logger');
+
+module.exports = (err, req, res, next) => {
+  logger.error(err.message, { stack: err.stack });
+  const statusCode = err.statusCode || 500;
+  res.status(statusCode).json({
+    success: false,
+    message: err.message || 'Internal Server Error',
+  });
+};
+
+// == FILE: src/middlewares/auth.js ==
+const jwt = require('jsonwebtoken');
+const config = require('../config/config');
+const ApiError = require('../utils/ApiError');
+const User = require('../models/User');
+
+module.exports = async (req, res, next) => {
+  try {
+    const header = req.headers.authorization;
+    if (!header || !header.startsWith('Bearer ')) throw new ApiError(401, 'Not authenticated');
+    const token = header.split(' ')[1];
+    const payload = jwt.verify(token, config.jwtSecret);
+    const user = await User.findById(payload.sub).select('-password');
+    if (!user) throw new ApiError(401, 'User not found');
+    req.user = user;
+    next();
+  } catch (err) {
+    next(new ApiError(401, 'Not authorized'));
+  }
+};
+
+// == FILE: src/validators/authValidators.js ==
+const Joi = require('joi');
+
+const register = Joi.object({
+  name: Joi.string().min(2).max(100).required(),
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).required(),
+});
+
+const login = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().required(),
+});
+
+module.exports = { register, login };
+
+// == FILE: src/validators/bookingValidators.js ==
+const Joi = require('joi');
+
+const createBooking = Joi.object({
+  propertyId: Joi.string().required(),
+  roomId: Joi.string().required(),
+  checkInDate: Joi.date().required(),
+  checkOutDate: Joi.date().greater(Joi.ref('checkInDate')).required(),
+  guests: Joi.number().min(1).required(),
+  paymentMethod: Joi.string().valid('stripe','easypaisa','jazzcash','cod').default('cod'),
+});
+
+module.exports = { createBooking };
+
+// == FILE: src/middlewares/validateRequest.js ==
+const ApiError = require('../utils/ApiError');
+
+module.exports = (schema) => (req, res, next) => {
+  const { error } = schema.validate(req.body);
+  if (error) return next(new ApiError(400, error.details.map(d => d.message).join(', ')));
+  next();
+};
+
+// == FILE: src/models/User.js ==
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true, lowercase: true },
+  phone: { type: String },
+  password: { type: String, required: true },
+}, { timestamps: true });
+
+userSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) return next();
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+userSchema.methods.matchPassword = async function (entered) {
+  return bcrypt.compare(entered, this.password);
+};
+
+module.exports = mongoose.model('User', userSchema);
+
+// == FILE: src/models/Property.js ==
+const mongoose = require('mongoose');
+
+const propertySchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  description: { type: String },
+  address: { type: String },
+  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+}, { timestamps: true });
+
+module.exports = mongoose.model('Property', propertySchema);
+
+// == FILE: src/models/Room.js ==
+const mongoose = require('mongoose');
+
+const roomSchema = new mongoose.Schema({
+  propertyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Property', required: true },
+  name: { type: String },
+  roomNumber: { type: String },
+  pricePerNight: { type: Number, required: true },
+  maxGuests: { type: Number, default: 1 },
+  amenities: [String],
+  images: [String],
+}, { timestamps: true });
+
+roomSchema.index({ propertyId: 1 });
+
+module.exports = mongoose.model('Room', roomSchema);
+
+// == FILE: src/models/Booking.js ==
+const mongoose = require('mongoose');
+
+const bookingSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  propertyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Property', required: true },
+  roomId: { type: mongoose.Schema.Types.ObjectId, ref: 'Room', required: true },
+  checkInDate: { type: Date, required: true },
+  checkOutDate: { type: Date, required: true },
+  totalNights: { type: Number, required: true },
+  pricePerNight: { type: Number, required: true },
+  totalAmount: { type: Number, required: true },
+  guests: { type: Number, default: 1 },
+  paymentStatus: { type: String, enum: ['pending','paid','failed'], default: 'pending' },
+  bookingStatus: { type: String, enum: ['pending','confirmed','cancelled'], default: 'pending' },
+  meta: { type: Object },
+}, { timestamps: true });
+
+// index for faster availability queries
+bookingSchema.index({ roomId: 1, checkInDate: 1, checkOutDate: 1 });
+
+module.exports = mongoose.model('Booking', bookingSchema);
+
+// == FILE: src/models/Payment.js ==
+const mongoose = require('mongoose');
+
+const paymentSchema = new mongoose.Schema({
+  bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking', required: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  amount: { type: Number, required: true },
+  paymentMethod: { type: String },
+  transactionId: { type: String },
+  status: { type: String, enum: ['initiated','success','failed'], default: 'initiated' },
+  paidAt: { type: Date },
+  raw: { type: Object },
+}, { timestamps: true });
+
+module.exports = mongoose.model('Payment', paymentSchema);
+
+// == FILE: src/controllers/authController.js ==
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+const asyncHandler = require('../middlewares/asyncHandler');
+const ApiError = require('../utils/ApiError');
+const config = require('../config/config');
+
+const signToken = (user) => jwt.sign({ sub: user._id }, config.jwtSecret, { expiresIn: config.jwtExpiration });
+
+exports.register = asyncHandler(async (req, res) => {
+  const { name, email, password, phone } = req.body;
+  const existing = await User.findOne({ email });
+  if (existing) throw new ApiError(400, 'Email already in use');
+  const user = await User.create({ name, email, password, phone });
+  const token = signToken(user);
+  res.status(201).json({ success: true, token, user: { id: user._id, name: user.name, email: user.email } });
+});
+
+exports.login = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  const user = await User.findOne({ email });
+  if (!user) throw new ApiError(401, 'Invalid credentials');
+  const isMatch = await user.matchPassword(password);
+  if (!isMatch) throw new ApiError(401, 'Invalid credentials');
+  const token = signToken(user);
+  res.json({ success: true, token, user: { id: user._id, name: user.name, email: user.email } });
+});
+
+// == FILE: src/controllers/propertyController.js ==
+const Property = require('../models/Property');
+const asyncHandler = require('../middlewares/asyncHandler');
+const ApiError = require('../utils/ApiError');
+
+exports.createProperty = asyncHandler(async (req, res) => {
+  const data = { ...req.body, ownerId: req.user._id };
+  const property = await Property.create(data);
+  res.status(201).json({ success: true, property });
+});
+
+exports.listProperties = asyncHandler(async (req, res) => {
+  const props = await Property.find().limit(50);
+  res.json({ success: true, count: props.length, data: props });
+});
+
+// == FILE: src/controllers/roomController.js ==
+const Room = require('../models/Room');
+const asyncHandler = require('../middlewares/asyncHandler');
+
+exports.createRoom = asyncHandler(async (req, res) => {
+  const room = await Room.create(req.body);
+  res.status(201).json({ success: true, room });
+});
+
+exports.listRooms = asyncHandler(async (req, res) => {
+  const { propertyId } = req.query;
+  const filter = {};
+  if (propertyId) filter.propertyId = propertyId;
+  const rooms = await Room.find(filter).limit(100);
+  res.json({ success: true, count: rooms.length, data: rooms });
+});
+
+// == FILE: src/controllers/bookingController.js ==
+const Booking = require('../models/Booking');
+const Room = require('../models/Room');
+const Payment = require('../models/Payment');
+const asyncHandler = require('../middlewares/asyncHandler');
+const ApiError = require('../utils/ApiError');
+
+// helper: check overlap
+const isOverlapping = (existingCheckIn, existingCheckOut, newCheckIn, newCheckOut) =>
+  (new Date(existingCheckIn) < new Date(newCheckOut)) && (new Date(existingCheckOut) > new Date(newCheckIn));
+
+// availability check using DB query (fast because of index)
+const isAvailable = async (roomId, checkInDate, checkOutDate) => {
+  const conflict = await Booking.findOne({
+    roomId,
+    bookingStatus: { $in: ['pending','confirmed'] },
+    $expr: {
+      $and: [
+        { $lt: [ '$checkInDate', new Date(checkOutDate) ] },
+        { $gt: [ '$checkOutDate', new Date(checkInDate) ] }
+      ]
+    }
+  });
+  return !conflict;
+};
+
+exports.createBooking = asyncHandler(async (req, res) => {
+  const { propertyId, roomId, checkInDate, checkOutDate, guests, paymentMethod } = req.body;
+  // validate room exists
+  const room = await Room.findById(roomId);
+  if (!room) throw new ApiError(404, 'Room not found');
+
+  // availability
+  const available = await isAvailable(roomId, checkInDate, checkOutDate);
+  if (!available) throw new ApiError(400, 'Room not available for selected dates');
+
+  const msPerNight = 1000 * 60 * 60 * 24;
+  const nights = Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / msPerNight);
+  const totalAmount = nights * room.pricePerNight;
+
+  // create booking with pending payment
+  const booking = await Booking.create({
+    userId: req.user._id,
+    propertyId,
+    roomId,
+    checkInDate,
+    checkOutDate,
+    totalNights: nights,
+    pricePerNight: room.pricePerNight,
+    totalAmount,
+    guests,
+    paymentStatus: 'pending',
+    bookingStatus: 'pending',
+    meta: { paymentMethod }
+  });
+
+  // Here you would call payment gateway -> get redirect url or token
+  // For now we return booking & a fake payment link
+  res.status(201).json({ success: true, booking, payment: { checkoutUrl: `https://example-payments/checkout?booking=${booking._id}` } });
+});
+
+// Payment webhook/confirm (simulate)
+exports.confirmBookingPayment = asyncHandler(async (req, res) => {
+  const { bookingId, transactionId, status } = req.body; // status: success|failed
+  const booking = await Booking.findById(bookingId);
+  if (!booking) throw new ApiError(404, 'Booking not found');
+
+  // record payment
+  const payment = await Payment.create({
+    bookingId: booking._id,
+    userId: booking.userId,
+    amount: booking.totalAmount,
+    paymentMethod: booking.meta.paymentMethod,
+    transactionId,
+    status: status === 'success' ? 'success' : 'failed',
+    paidAt: status === 'success' ? new Date() : null,
+    raw: req.body,
+  });
+
+  if (status === 'success') {
+    booking.paymentStatus = 'paid';
+    booking.bookingStatus = 'confirmed';
+    await booking.save();
+  } else {
+    booking.paymentStatus = 'failed';
+    booking.bookingStatus = 'pending';
+    await booking.save();
+  }
+
+  res.json({ success: true, booking, payment });
+});
+
+exports.userBookings = asyncHandler(async (req, res) => {
+  const bookings = await Booking.find({ userId: req.user._id }).populate('roomId propertyId');
+  res.json({ success: true, count: bookings.length, data: bookings });
+});
+
+// Admin: list bookings with filters
+exports.listBookings = asyncHandler(async (req, res) => {
+  const { roomId, status, from, to, page = 1, limit = 20 } = req.query;
+  const filter = {};
+  if (roomId) filter.roomId = roomId;
+  if (status) filter.bookingStatus = status;
+  if (from || to) filter.checkInDate = {};
+  if (from) filter.checkInDate.$gte = new Date(from);
+  if (to) filter.checkInDate.$lte = new Date(to);
+  const skip = (page - 1) * limit;
+  const data = await Booking.find(filter).skip(skip).limit(Number(limit)).sort({ createdAt: -1 });
+  res.json({ success: true, count: data.length, data });
+});
+
+// == FILE: src/controllers/paymentController.js ==
+const asyncHandler = require('../middlewares/asyncHandler');
+const ApiError = require('../utils/ApiError');
+
+// NOTE: Integrate real payment SDK (Stripe / JazzCash / Easypaisa).
+// This controller holds placeholders for starting a payment and webhooks.
+
+exports.startPayment = asyncHandler(async (req, res) => {
+  const { bookingId } = req.body;
+  // implement payment initiation using chosen gateway
+  res.json({ success: true, message: 'Payment initiation not implemented in scaffold. Use gateway SDK.' });
+});
+
+exports.webhook = asyncHandler(async (req, res) => {
+  // parse webhook, verify signature, then call booking.confirmBookingPayment
+  res.status(200).json({ received: true });
+});
+
+// == FILE: src/routes/index.js ==
+const express = require('express');
+const router = express.Router();
+
+router.use('/auth', require('./auth'));
+router.use('/properties', require('./properties'));
+router.use('/rooms', require('./rooms'));
+router.use('/bookings', require('./bookings'));
+router.use('/payments', require('./payments'));
+
+module.exports = router;
+
+// == FILE: src/routes/auth.js ==
+const express = require('express');
+const router = express.Router();
+const authController = require('../controllers/authController');
+const validate = require('../middlewares/validateRequest');
+const { register, login } = require('../validators/authValidators');
+
+router.post('/register', validate(register), authController.register);
+router.post('/login', validate(login), authController.login);
+
+module.exports = router;
+
+// == FILE: src/routes/properties.js ==
+const express = require('express');
+const router = express.Router();
+const propertyCtrl = require('../controllers/propertyController');
+const auth = require('../middlewares/auth');
+
+router.get('/', propertyCtrl.listProperties);
+router.post('/', auth, propertyCtrl.createProperty);
+
+module.exports = router;
+
+// == FILE: src/routes/rooms.js ==
+const express = require('express');
+const router = express.Router();
+const roomCtrl = require('../controllers/roomController');
+const auth = require('../middlewares/auth');
+
+router.get('/', roomCtrl.listRooms);
+router.post('/', auth, roomCtrl.createRoom);
+
+module.exports = router;
+
+// == FILE: src/routes/bookings.js ==
+const express = require('express');
+const router = express.Router();
+const bookingCtrl = require('../controllers/bookingController');
+const auth = require('../middlewares/auth');
+const validate = require('../middlewares/validateRequest');
+const { createBooking } = require('../validators/bookingValidators');
+
+router.post('/', auth, validate(createBooking), bookingCtrl.createBooking);
+router.post('/confirm-payment', bookingCtrl.confirmBookingPayment); // webhook or manual simulate
+router.get('/me', auth, bookingCtrl.userBookings);
+router.get('/', auth, bookingCtrl.listBookings); // admin use
+
+module.exports = router;
+
+// == FILE: src/routes/payments.js ==
+const express = require('express');
+const router = express.Router();
+const paymentCtrl = require('../controllers/paymentController');
+
+router.post('/start', paymentCtrl.startPayment);
+router.post('/webhook', paymentCtrl.webhook);
+
+module.exports = router;
+
+// == FILE: README.md ==
+# Express MongoDB Booking API (scaffold)
+
+This scaffold provides a production-oriented starting point for a property/room booking REST API using Node.js, Express and MongoDB (Mongoose).
+
+Features included:
+- Auth (JWT) register/login
+- Models: User, Property, Room, Booking, Payment
+- Controllers + routes for bookings, availability, payments (placeholder)
+- Validation with Joi
+- Rate limiting, security headers, logging
+- Proper error handling
+
+## Quick start
+1. Copy files into a project folder.
+2. `cp .env.example .env` and update values.
+3. `npm install`
+4. `npm run dev`
+
+## Next steps / production hardening
+- Add HTTPS & reverse-proxy (nginx)
+- Use real payment gateway SDK and verify webhooks
+- Add tests
+- Add RBAC / admin roles
+- Use Redis for caching/rate-limiting/locks (prevent race conditions)
+- Use DB transactions where supported (Mongo 4.0+ sessions)
+- Add monitoring (Prometheus/NewRelic) and structured logging
+
+// == FILE: Notes.md ==
+Important implementation notes:
+- Double-booking prevention: current scaffold checks availability via a query. In heavy-concurrency environments use DB transactions or a booking lock (Redis) to avoid race conditions.
+- Payment flow: create booking in 'pending' state, initiate payment, wait webhook -> mark paid & confirmed. Do not trust client-side success.
+- Indexes: bookings collection has indexes used in availability checks.
+- Admin endpoints should be protected & paginated.
+
+// End of scaffold
