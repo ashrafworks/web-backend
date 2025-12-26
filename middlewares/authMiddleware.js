@@ -5,7 +5,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 export const checkAuth = asyncHandler(async (req, res, next) => {
   const { token } = req.signedCookies;
   const session = await Session.findOne({ _id: token });
-
+  console.log(token);
   if (!token || !session) {
     const error = {
       statusCode: 401,
@@ -15,7 +15,7 @@ export const checkAuth = asyncHandler(async (req, res, next) => {
   }
   
   req.session = session;
-  const user = await User.findOne({ _id: session.userId });
+  const user = await User.findOne({ _id: session.userId }).lean();
   req.user = user;
 
   next();

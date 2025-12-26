@@ -6,7 +6,7 @@ export const getUser = asyncHandler(async (req, res) => {
     success: true,
     message: "user data",
     data: {
-      id: req.user.id,
+      id: req.user._id,
       name: req.user.name,
       email: req.user.email,
       image: req.user.image,

@@ -1,10 +1,10 @@
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 
 const reservationSchema = new mongoose.Schema(
   {
     // User details
     userId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Types.ObjectId,
       ref: "User",
       required: true,
     },
@@ -37,16 +37,28 @@ const reservationSchema = new mongoose.Schema(
         validator: function (value) {
           return value > this.checkInDate;
         },
-        message: "Check-out date check-in date se pehle nahi ho sakti",
+        message: "Check-out date check-in are not valid please enter a valid dates",
       },
     },
 
     // Guest info
-    numberOfGuests: {
-      type: Number,
-      required: true,
-      min: 1,
+    guests: {
+      adults: {
+        type: Number,
+        required: true,
+        min: 1,
+      },
+      children: {
+        type: Number,
+        default: 0,
+        min: 0,
+      }
     },
+    pets: {
+      type: Boolean,
+      default: false,
+    },
+
     numberOfNights: {
       type: Number,
       required: true,
@@ -59,6 +71,7 @@ const reservationSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+
     totalPrice: {
       type: Number,
       required: true,
@@ -71,11 +84,13 @@ const reservationSchema = new mongoose.Schema(
       enum: ["pending", "completed", "failed", "refunded"],
       default: "pending",
     },
+
     paymentMethod: {
       type: String,
-      enum: ["stripe", "card", "cash", "other"],
+      enum: ["stripe", "card", "cash", "other", "paypal", "google pay"],
       default: "stripe",
     },
+    
     paymentIntentId: {
       type: String,
       default: null,
