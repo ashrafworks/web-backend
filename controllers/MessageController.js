@@ -14,7 +14,7 @@ export const getOrCreateConversation = asyncHandler(async (req, res) => {
     let defaultAdmin = await User.findById(process.env.DEFAULT_ADMIN_ID);
 
     if (!defaultAdmin) {
-      throw { statusCode: 400, message: "No admin available for chat" }
+      throw { statusCode: 400, message: "No admin available for chat" };
     }
 
     let conversation = await Conversation.findOne({
@@ -69,58 +69,53 @@ export const getOrCreateConversation = asyncHandler(async (req, res) => {
 });
 
 // Get all conversations (Admin ke liye - multiple users)
-export const getAllConversations = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const userRole = req.user.role;
-    const { filter = "all", search = "" } = req.query;
-    let query = {};
+export const getAllConversations = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const userRole = req.user.role;
+  const { filter = "all", search = "" } = req.query;
+  let query = {};
 
-    if (userRole === "admin") {
-      query.admin = userId;
-      if (filter === "archived") {
-        query.archivedByAdmin = true;
-      } else {
-        query.archivedByAdmin = false;
-      }
+  if (userRole === "admin") {
+    query.admin = userId;
+    if (filter === "archived") {
+      query.archivedByAdmin = true;
     } else {
-      query.user = userId;
-      if (filter === "archived") {
-        query.archived = true;
-      } else {
-        query.archived = false;
-      }
+      query.archivedByAdmin = false;
     }
-    let conversations = await Conversation.find({ adminId: query.admin })
-      .populate("userId", "name email avatar")
-      .populate("adminId", "name email avatar")
-      .sort({ lastMessageDate: -1 });
-
-    // Apply unread filter
-    if (filter === "unread") {
-      conversations = conversations.filter((c) =>
-        userRole === "Admin" ? c.unreadByAdmin > 0 : c.unreadCount > 0
-      );
+  } else {
+    query.user = userId;
+    if (filter === "archived") {
+      query.archived = true;
+    } else {
+      query.archived = false;
     }
-
-    // Apply search filter
-    if (search) {
-      const searchLower = search.toLowerCase();
-      conversations = conversations.filter((c) => {
-        const otherUser = userRole === "Admin" ? c.user : c.admin;
-        return (
-          otherUser.name.toLowerCase().includes(searchLower) ||
-          c.lastMessage.toLowerCase().includes(searchLower)
-        );
-      });
-    }
-
-    res.status(200).json({ conversations });
-  } catch (error) {
-    console.error("Get conversations error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
   }
-};
+  let conversations = await Conversation.find({ adminId: query.admin })
+    .populate("userId", "name email avatar")
+    .populate("adminId", "name email avatar")
+    .sort({ lastMessageDate: -1 });
+
+  // Apply unread filter
+  if (filter === "unread") {
+    conversations = conversations.filter((c) =>
+      userRole === "Admin" ? c.unreadByAdmin > 0 : c.unreadCount > 0
+    );
+  }
+
+  // Apply search filter
+  if (search) {
+    const searchLower = search.toLowerCase();
+    conversations = conversations.filter((c) => {
+      const otherUser = userRole === "Admin" ? c.user : c.admin;
+      return (
+        otherUser.name.toLowerCase().includes(searchLower) ||
+        c.lastMessage.toLowerCase().includes(searchLower)
+      );
+    });
+  }
+
+  res.status(200).json({ conversations });
+});
 
 // Get messages for a conversation
 export const getMessages = async (req, res) => {

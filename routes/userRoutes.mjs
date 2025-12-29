@@ -5,8 +5,8 @@ import { authorizeAdmim, checkAuth } from '../middlewares/authMiddleware.js';
 
 const router = express.Router(); 
 
-router.post('/user', checkAuth, getUser);
-router.post('/all-users', checkAuth, authorizeAdmim, allUsers);
+router.get('/user', checkAuth, getUser);
+router.get('/all-users', checkAuth, authorizeAdmim, allUsers);
 
 
 export default router;

@@ -20,7 +20,6 @@ try {
 
   const app = express();
   const server = http.createServer(app);
-
   app.use(
     cors({
       origin: process.env.FRONTEND_URL || "http://192.168.100.107:1234",

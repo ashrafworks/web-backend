@@ -2,13 +2,12 @@ import Session from "../models/sessionModel.js";
 import User from "../models/userModel.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
-
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
 
   const user = await User.findOne({ email }).lean();
   //check if user exist then throw error
-  if (user) 
+  if (user)
     throw {
       statusCode: 409,
       message: "Email already exists",
@@ -27,7 +26,9 @@ export const register = asyncHandler(async (req, res) => {
 });
 
 export const login = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
+  console.log(req.body);
+  const { email, password } = req.body || {};
+
   // first error declare
   const error = {
     statusCode: 401,
@@ -60,5 +61,5 @@ export const login = asyncHandler(async (req, res) => {
 export const logout = asyncHandler(async (req, res) => {
   console.log(req.session);
   await req.session.deleteOne();
-  return res.clearCookie('token').status(204).end();
-})
+  return res.clearCookie("token").status(204).end();
+});
