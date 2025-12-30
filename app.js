@@ -6,7 +6,9 @@ import cors from "cors";
 import authRoutes from "./routes/authRoutes.mjs";
 import userRoutes from "./routes/userRoutes.mjs";
 import messageRoutes from "./routes/messageRoutes.mjs";
+import propertyRoutes from "./routes/propertyRoutes.mjs";
 import reservationRoute from "./routes/reservationRoute.mjs";
+import bookingRoutes from "./routes/bookingRoutes.js";
 import { connectDb } from "./config/db.js";
 import cookieParser from "cookie-parser";
 import Session from "./models/sessionModel.js";
@@ -36,6 +38,8 @@ try {
   app.use("/api", userRoutes);
   app.use("/api/reservations", reservationRoute);
   app.use("/api/messages", messageRoutes);
+  app.use("/api/properties", propertyRoutes);
+  app.use("/api/bookings", bookingRoutes);
 
   app.get(
     "/test",
