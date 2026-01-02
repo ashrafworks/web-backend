@@ -51,7 +51,7 @@ const propertySchema = new mongoose.Schema(
   }
 );
 
-// 👇 Collection name forcefully "properties"
+
 const Property = mongoose.model("Property", propertySchema, "properties");
 
 export default Property;

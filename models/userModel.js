@@ -1,4 +1,4 @@
-import { model, Schema } from "mongoose";
+import { model, Schema, Types } from "mongoose";
 import bcrypt from "bcrypt";
 
 const userSchema = new Schema(
@@ -7,7 +7,7 @@ const userSchema = new Schema(
       type: String,
       required: [true, "Name is required"],
       trim: true,
-      minlength: [3, "name must be at least 3 characters long"],
+      minlength: [3, "Name must be at least 3 characters long"],
     },
     email: {
       type: String,
@@ -29,31 +29,51 @@ const userSchema = new Schema(
     },
     role: {
       type: String,
+      enum: ["user", "admin"],
       default: "user",
     },
     image: {
       type: String,
       default: null,
     },
+   
+    propertyId: {
+      type: Types.ObjectId,
+      ref: "Property",
+      default: null,
+    },
+  
+    resetPasswordToken: {
+      type: String,
+      default: null,
+    },
+    resetPasswordExpire: {
+      type: Date,
+      default: null,
+    },
   },
   {
-    strict: "throw", // throw usually use for throw erros strict default value is "true".
+    strict: "throw",
     timestamps: true,
   }
 );
 
-// password compare method
+// Password compare method
 userSchema.methods.comparePassword = async function (password) {
-    return await bcrypt.compare(password, this.password);
-}
+  return await bcrypt.compare(password, this.password);
+};
 
+// Hash password before saving
 userSchema.pre("save", async function () {
-    console.log('pre hook')
-    console.log(this.isModified('password'))
-    if (!this.isModified("password")) return;
+  if (!this.isModified("password")) {
+    return 
+  }
 
+  try {
     this.password = await bcrypt.hash(this.password, 10);
-
+  } catch (error) {
+    console.log(error);
+  }
 });
 
 const User = model("User", userSchema);

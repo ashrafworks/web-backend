@@ -7,7 +7,7 @@ export default function parseSignedCookie(cookieHeader, cookieName, secret) {
   cookieHeader.split(";").forEach((cookie) => {
     const [key, ...v] = cookie.split("=");
     if (!key) return;
-    cookies[key.trim()] = v.join("="); // agar value me '=' ho to join kar lo
+    cookies[key.trim()] = v.join("="); 
   });
 
   let value = cookies[cookieName.trim()];
@@ -30,7 +30,7 @@ export default function parseSignedCookie(cookieHeader, cookieName, secret) {
     .createHmac("sha256", secret)
     .update(originalValue)
     .digest("base64")
-    .replace(/=+$/, ""); // remove trailing =
+    .replace(/=+$/, ""); 
 
   if (signature === expectedSignature) return originalValue;
 

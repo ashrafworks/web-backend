@@ -1,13 +1,30 @@
-import express from 'express';
-import { login, logout, register } from '../controllers/AuthController.js';
-import { checkAuth } from '../middlewares/authMiddleware.js';
+// import express from "express";
+// import {
+//   register,
+//   login,
+//   logout,
+//   verifyToken,
+//   refreshToken,
+// } from "../controllers/authController.js";
+// import { authMiddleware } from "../middlewares/authMiddleware.js";
 
-const router = express.Router();
+// const router = express.Router();
 
-router.post('/register', register);
+// // ========== PUBLIC ROUTES ==========
+// // Register new user
+// router.post("/register", register);
 
-router.post('/login', login);
-router.post('/logout', checkAuth, logout);
+// // Login user
+// router.post("/login", login);
 
+// // Verify token (check if token is valid)
+// router.post("/verify-token", verifyToken);
 
-export default router;
+// // ========== PROTECTED ROUTES ==========
+// // Logout (requires authentication)
+// router.post("/logout", authMiddleware, logout);
+
+// // Refresh token (extend session)
+// router.post("/refresh-token", refreshToken);
+
+// export default router;

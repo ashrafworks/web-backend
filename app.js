@@ -1,20 +1,15 @@
-import dotenv from "dotenv";
-dotenv.config();
+// import dotenv from "dotenv";
+// dotenv.config();
 import http from "node:http";
 import express from "express";
 import cors from "cors";
-import authRoutes from "./routes/authRoutes.mjs";
 import userRoutes from "./routes/userRoutes.mjs";
 import messageRoutes from "./routes/messageRoutes.mjs";
 import propertyRoutes from "./routes/propertyRoutes.mjs";
-import reservationRoute from "./routes/reservationRoute.mjs";
 import bookingRoutes from "./routes/bookingRoutes.js";
 import { connectDb } from "./config/db.js";
 import cookieParser from "cookie-parser";
-import Session from "./models/sessionModel.js";
-import User from "./models/userModel.js";
 import { errorHandler } from "./utils/errorHandler.js";
-import { asyncHandler } from "./utils/asyncHandler.js";
 import initializeSocket from "./config/socket.js";
 
 try {
@@ -34,25 +29,23 @@ try {
   const io = initializeSocket(server);
   app.set("io", io);
 
-  app.use("/api/auth", authRoutes);
-  app.use("/api", userRoutes);
-  app.use("/api/reservations", reservationRoute);
+  // app.use("/api/auth", authRoutes);
+  app.use("/api/user", userRoutes);
   app.use("/api/messages", messageRoutes);
   app.use("/api/properties", propertyRoutes);
   app.use("/api/bookings", bookingRoutes);
 
-  app.get(
-    "/test",
-    asyncHandler(async (req, res) => {
-      res.cookie("token", "694e9a67cf593042e13b102e", {
-        httpOnly: true,
-        signed: true,
-        maxAge: 60 * 1000 * 60 * 24 * 7,
-      }).end('cookie saved');
-    })
-  );
+  // app.get(
+  //   "/test",
+  //   asyncHandler(async (req, res) => {
+  //     res.cookie("token", "694e9a67cf593042e13b102e", {
+  //       httpOnly: true,
+  //       signed: true,
+  //       maxAge: 60 * 1000 * 60 * 24 * 7,
+  //     }).end('cookie saved');
+  //   })
+  // );
 
-  // global error handler middleware
   app.use(errorHandler);
 
   const PORT = process.env.PORT || 5000;
