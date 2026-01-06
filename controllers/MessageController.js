@@ -28,8 +28,8 @@ export const getOrCreateConversation = asyncHandler(async (req, res) => {
       userId,
       adminId: defaultAdmin._id,
     })
-      .populate("userId", "name email avatar")
-      .populate("adminId", "name email avatar");
+      .populate("userId", "name email image")
+      .populate("adminId", "name email image");
 
     if (!conversation) {
       conversation = await Conversation.create({
@@ -38,8 +38,8 @@ export const getOrCreateConversation = asyncHandler(async (req, res) => {
       });
 
       conversation = await Conversation.findById(conversation._id)
-        .populate("userId", "name email avatar")
-        .populate("adminId", "name email avatar");
+        .populate("userId", "name email image")
+        .populate("adminId", "name email image");
     }
 
     return res.status(200).json({
@@ -69,8 +69,8 @@ export const getOrCreateConversation = asyncHandler(async (req, res) => {
     userId: targetUserId,
     adminId: userId,
   })
-    .populate("userId", "name email avatar")
-    .populate("adminId", "name email avatar");
+    .populate("userId", "name email image")
+    .populate("adminId", "name email image");
 
   if (!conversation) {
     conversation = await Conversation.create({
@@ -79,8 +79,8 @@ export const getOrCreateConversation = asyncHandler(async (req, res) => {
     });
 
     conversation = await Conversation.findById(conversation._id)
-      .populate("userId", "name email avatar")
-      .populate("adminId", "name email avatar");
+      .populate("userId", "name email image")
+      .populate("adminId", "name email image");
   }
 
   res.status(200).json({
@@ -114,8 +114,8 @@ export const getAllConversations = asyncHandler(async (req, res) => {
   }
 
   let conversations = await Conversation.find(query)
-    .populate("userId", "name email avatar")
-    .populate("adminId", "name email avatar")
+    .populate("userId", "name email image")
+    .populate("adminId", "name email image")
     .sort({ lastMessageDate: -1 });
 
   // Apply unread filter
@@ -180,7 +180,7 @@ export const getMessages = asyncHandler(async (req, res) => {
   }
 
   const messages = await Message.find({ conversationId })
-    .populate("sender", "name email avatar")
+    .populate("sender", "name email image")
     .sort({ createdAt: 1 });
 
   // Mark messages as read
@@ -256,7 +256,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
 
   const populatedMessage = await Message.findById(message._id).populate(
     "sender",
-    "name email avatar"
+    "name email image"
   );
 
   // Update conversation

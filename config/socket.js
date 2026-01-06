@@ -4,12 +4,18 @@ import cookieParser from "socket.io-cookie-parser";
 import User from "../models/userModel.js";
 import Session from "../models/sessionModel.js";
 
-
+const allowedOrigins = [
+  "http://localhost:1234",
+  "http://localhost:5173",
+  "https://claudie-pitiful-karyl.ngrok-free.dev",
+  "https://deluxe-bienenstitch-fbd7b1.netlify.app"
+];
 
 const initializeSocket = (server) => {
   const io = new Server(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || "http://192.168.100.107:3000",
+      // origin: process.env.FRONTEND_URL || "http://192.168.100.107:3000",
+      origin: allowedOrigins,
       methods: ["GET", "POST"],
       credentials: true,
     },

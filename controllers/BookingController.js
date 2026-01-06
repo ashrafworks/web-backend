@@ -567,14 +567,14 @@ export const getBookingStats = asyncHandler(async (req, res) => {
   const [
     totalBookings,
     confirmedBookings,
-    pendingBookings,
+    cancelledBookings,
     todayCheckIns,
     todayCheckOuts,
     upcomingBookings,
   ] = await Promise.all([
     Booking.countDocuments(),
     Booking.countDocuments({ bookingStatus: "confirmed" }),
-    Booking.countDocuments({ bookingStatus: "pending" }),
+    Booking.countDocuments({ bookingStatus: "cancelled" }),
     Booking.countDocuments({
       checkIn: {
         $gte: today,
@@ -598,7 +598,7 @@ export const getBookingStats = asyncHandler(async (req, res) => {
     data: {
       totalBookings,
       confirmedBookings,
-      pendingBookings,
+      cancelledBookings,
       todayCheckIns,
       todayCheckOuts,
       upcomingBookings,

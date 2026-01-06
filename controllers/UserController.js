@@ -91,10 +91,11 @@ export const login = asyncHandler(async (req, res) => {
   return res
     .cookie("token", session._id.toString(), {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
+      // secure: process.env.NODE_ENV === "production",
       signed: true,
       maxAge: 10 * 24 * 60 * 60 * 1000, // 10 days
-      sameSite: "strict",
+      sameSite: "none",
     })
     .status(200)
     .json({
@@ -269,6 +270,7 @@ export const changePassword = asyncHandler(async (req, res) => {
 });
 
 export const requestPasswordReset = asyncHandler(async (req, res) => {
+  console.log(req.body);
   const { email } = req.body;
 
   if (!email || !email.trim()) {

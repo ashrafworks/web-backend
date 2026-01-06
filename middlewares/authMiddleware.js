@@ -4,7 +4,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 export const checkAuth = asyncHandler(async (req, res, next) => {
   const { token } = req.signedCookies;
-
+console.log({token});
   if (!token) {
     const error = new Error("Authentication required. Please login");
     error.statusCode = 401;

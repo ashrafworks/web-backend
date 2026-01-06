@@ -12,6 +12,13 @@ import cookieParser from "cookie-parser";
 import { errorHandler } from "./utils/errorHandler.js";
 import initializeSocket from "./config/socket.js";
 
+const allowedOrigins = [
+  "http://localhost:1234",
+  "http://localhost:5173",
+  "https://claudie-pitiful-karyl.ngrok-free.dev",
+  "https://deluxe-bienenstitch-fbd7b1.netlify.app"
+]; //only for testing
+
 try {
   await connectDb();
 
@@ -19,7 +26,8 @@ try {
   const server = http.createServer(app);
   app.use(
     cors({
-      origin: process.env.FRONTEND_URL || "http://192.168.100.107:1234",
+      // origin: process.env.FRONTEND_URL || "http://192.168.100.107:1234",
+      origin: allowedOrigins,
       credentials: true,
     })
   );
